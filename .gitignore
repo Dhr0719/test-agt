@@ -61,3 +61,19 @@ local_settings.py
 .env.*
 !.env.example
 !.env.example_CN
+
+# Python virtual environment with dot name
+.venv/
+ENV/
+ai-server/.venv/
+ai-server/venv/
+ai-server/env/
+
+# AI server generated local files
+ai-server/.cache/
+ai-server/vector_store/
+ai-server/storage/
+ai-server/chroma/
+
+# Java / backend build if any
+target/
