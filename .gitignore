@@ -54,3 +54,10 @@ db.sqlite3-journal
 media/
 static/
 local_settings.py
+
+
+#配置文件
+.env
+.env.*
+!.env.example
+!.env.example_CN
