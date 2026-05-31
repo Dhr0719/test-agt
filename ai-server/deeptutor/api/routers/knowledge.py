@@ -224,6 +224,10 @@ def _save_uploaded_files(
                 uploaded_files.append(sanitized_filename)
                 uploaded_file_paths.append(qiniu_key)
 
+                # Also save to local target_dir for immediate processing (e.g. KB init)
+                local_path = target_dir / sanitized_filename
+                local_path.write_bytes(file_bytes)
+
                 logger.info(f"Uploaded to Qiniu: {sanitized_filename} -> {qiniu_key}")
 
             except HTTPException:
@@ -539,7 +543,7 @@ async def run_upload_processing_task(
 
             for qiniu_key in uploaded_file_paths:
                 try:
-                    file_bytes = await run_in_thread(download_from_qiniu, qiniu_key)
+                    file_bytes = await asyncio.to_thread(download_from_qiniu, qiniu_key)
                     filename = qiniu_key.split("_", 1)[-1] if "_" in qiniu_key else qiniu_key.split("/")[-1]
                     local_path = temp_dir / filename
                     local_path.write_bytes(file_bytes)

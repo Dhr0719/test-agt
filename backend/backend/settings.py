@@ -137,3 +137,13 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+AI_SERVER_HTTP_BASE_URL = "http://127.0.0.1:8001"
+AI_SERVER_WS_BASE_URL = "ws://127.0.0.1:8001"
+AI_SERVER_KB_NAME = "default"
+
+# # 七牛云存储
+# QINIU_ACCESS_KEY = "YgzsPYqNvsHWFQnu3bXdEDw5PgP7E9FnOq2KxfuY"
+# QINIU_SECRET_KEY = "XMFNbasWucinxKXFItTQqwv47-A-a86fo_V4fZwW"
+# QINIU_BUCKET_NAME = "agt111"
+# QINIU_BUCKET_DOMAIN = "http://tfw41eaq8.hb-bkt.clouddn.com"

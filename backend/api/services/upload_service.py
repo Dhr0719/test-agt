@@ -1,61 +1,18 @@
 import time
+
+from django.conf import settings
 from django.db import close_old_connections
 
 from ..models import UploadTask, KnowledgePoint
 from common.upload_progress import set_upload_progress
-
-
-def extract_text_from_file(file_path):
-    """
-    第一版先支持 txt / md / py / java / c / cpp 这类文本文件。
-    PDF、Word 后面再加解析库。
-    """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except UnicodeDecodeError:
-        with open(file_path, "r", encoding="gbk", errors="ignore") as f:
-            return f.read()
-
-
-def simple_match_knowledge_points(text, knowledge_points):
-    """
-    第一版先用关键词模拟知识点映射。
-    后面这里可以替换成 DeepSeek 分析。
-    """
-    result = []
-    lower_text = text.lower()
-
-    for point in knowledge_points:
-        keywords = point.keywords or ""
-        keyword_list = [k.strip() for k in keywords.replace("，", ",").split(",") if k.strip()]
-
-        matched_keywords = []
-
-        if point.name and point.name.lower() in lower_text:
-            matched_keywords.append(point.name)
-
-        for keyword in keyword_list:
-            if keyword.lower() in lower_text:
-                matched_keywords.append(keyword)
-
-        if matched_keywords:
-            result.append({
-                "knowledge_point_id": point.id,
-                "name": point.name,
-                "category": point.category,
-                "confidence": 0.8,
-                "reason": f"文件内容中匹配到关键词：{', '.join(set(matched_keywords))}",
-            })
-
-    return result
+from .ai_server_client import (
+    upload_file_to_ai_server,
+    poll_ai_server_progress,
+)
+from .ai_server_ws_client import ask_ai_server_for_knowledge_mapping
 
 
 def process_upload_task(task_id):
-    """
-    后台处理上传任务。
-    第一版：模拟进度 + 简单关键词匹配。
-    """
     close_old_connections()
 
     try:
@@ -63,35 +20,87 @@ def process_upload_task(task_id):
 
         task.status = "PROCESSING"
         task.save(update_fields=["status", "updated_at"])
-        set_upload_progress(task_id, "PROCESSING", "正在读取文件", 20)
 
-        time.sleep(0.5)
+        set_upload_progress(task_id, "PROCESSING", "正在上传文件到 AI 服务", 20)
 
-        text = extract_text_from_file(task.file.path)
-        set_upload_progress(task_id, "PROCESSING", "正在解析文件内容", 40)
+        ai_upload_result = upload_file_to_ai_server(
+            file_path=task.file.path,
+            filename=task.original_name,
+            kb_name=settings.AI_SERVER_KB_NAME,
+        )
 
-        time.sleep(0.5)
+        ai_task_id = ai_upload_result.get("task_id")
 
-        knowledge_points = KnowledgePoint.objects.all()
-        set_upload_progress(task_id, "PROCESSING", "正在匹配知识点", 60)
+        set_upload_progress(
+            task_id,
+            "PROCESSING",
+            f"AI 服务已接收文件，任务ID：{ai_task_id}",
+            35
+        )
 
-        time.sleep(0.5)
+        # 等待 ai-server 完成文档解析和索引
+        while True:
+            progress = poll_ai_server_progress(settings.AI_SERVER_KB_NAME)
 
-        mapped_points = simple_match_knowledge_points(text, knowledge_points)
+            stage = progress.get("stage")
+            message = progress.get("message", "")
+            percent = progress.get("progress_percent") or 0
 
-        task.summary = text[:300]
-        task.mapped_points = mapped_points
+            # 把 ai-server 的 0-100 映射到 Django 的 35-80
+            django_percent = 35 + int(percent * 0.45)
+
+            set_upload_progress(
+                task_id,
+                "PROCESSING",
+                f"AI 服务处理中：{message}",
+                django_percent
+            )
+
+            if stage == "completed":
+                break
+
+            if stage == "error":
+                raise RuntimeError(message or "AI 服务处理文件失败")
+
+            time.sleep(2)
+
+        set_upload_progress(task_id, "PROCESSING", "正在进行 AI 知识点映射", 85)
+
+        knowledge_points_data = [
+            {
+                "id": point.id,
+                "name": point.name,
+                "category": point.category,
+                "keywords": point.keywords,
+                "description": point.description,
+            }
+            for point in KnowledgePoint.objects.all()
+        ]
+
+        ai_mapping_result = ask_ai_server_for_knowledge_mapping(
+            kb_name=settings.AI_SERVER_KB_NAME,
+            knowledge_points=knowledge_points_data,
+        )
+
+        task.summary = ai_mapping_result.get("summary", "")
+        task.mapped_points = ai_mapping_result.get("matched_points", [])
         task.status = "DONE"
         task.save(update_fields=["summary", "mapped_points", "status", "updated_at"])
 
-        set_upload_progress(task_id, "DONE", "分析完成", 100)
+        set_upload_progress(task_id, "DONE", "AI 知识点映射完成", 100)
 
     except Exception as e:
         UploadTask.objects.filter(id=task_id).update(
             status="FAILED",
             error_message=str(e)
         )
-        set_upload_progress(task_id, "FAILED", f"处理失败：{str(e)}", 100)
+
+        set_upload_progress(
+            task_id,
+            "FAILED",
+            f"处理失败：{str(e)}",
+            100
+        )
 
     finally:
         close_old_connections()
