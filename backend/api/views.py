@@ -2,8 +2,8 @@ from django.shortcuts import render
 
 from django.http import JsonResponse
 
-def hello(request):
+def test_api(request):
     return JsonResponse({
-        "msg": "我是 Django 后端，Vue 你好！",
-        "code": 200
+        "code": 0,
+        "msg": "后端连接成功"
     })
