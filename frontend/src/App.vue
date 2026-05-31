@@ -11,5 +11,5 @@ onMounted(async () => {
 </script>
 
 <template>
-  <h1>{{ msg }}</h1>
+  <router-view />
 </template>
