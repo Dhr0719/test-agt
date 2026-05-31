@@ -1,3 +1,8 @@
 from django.contrib import admin
+from .models import KnowledgePoint
 
-# Register your models here.
+
+@admin.register(KnowledgePoint)
+class KnowledgePointAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "category")
+    search_fields = ("name", "category", "keywords")
